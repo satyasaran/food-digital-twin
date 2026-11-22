@@ -20,31 +20,37 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import assets
 from model import ModelParams, inventory_path, profiles, schedule_from_discounts, solve
 from simulator import DEFAULT_EVENTS, HOUR_W, StoreConfig
 from twin import MODES, AgentConfig, Session, compare_policies, kpis
 
-st.set_page_config(page_title="Digital twin - fresh food replenishment", layout="wide")
+st.set_page_config(page_title="FreshTwin - digital twin for perishable food", page_icon="🥦", layout="wide")
+st.markdown(assets.CSS, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- palette (validated categorical order)
-C = dict(blue="#2a78d6", orange="#eb6834", aqua="#1baf7a", yellow="#eda100", magenta="#e87ba4",
-         green="#008300", violet="#6250d6", grey="#8a8985", alert="#c62828")
-BRACKET_COLORS = [C["blue"], C["orange"], C["aqua"], C["yellow"], C["magenta"]]
+# food-themed categorical order (validated for colour-vision deficiency, adjacent pairs):
+# broccoli green, blueberry blue, carrot orange, aubergine violet, corn yellow, radish pink
+C = dict(s1="#2e8b3d", s2="#2a78d6", s3="#eb6834", s4="#6250d6", s5="#eda100", s6="#d6457a",
+         grey="#8a8985", alert="#c62828")
+BRACKET_COLORS = [C["s1"], C["s2"], C["s3"], C["s4"], C["s5"]]
 
 
 def fig_base(title, ytitle, height=300):
     fig = go.Figure()
-    fig.update_layout(template="plotly_white", title=dict(text=title, font=dict(size=15)), height=height,
+    fig.update_layout(template="plotly_white", title=dict(text=title, font=dict(size=15, color="#1f3d1f")), height=height,
+                      paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
                       margin=dict(l=10, r=10, t=40, b=10), hovermode="x unified",
                       legend=dict(orientation="h", yanchor="top", y=-0.12, xanchor="left", x=0),
                       yaxis_title=ytitle, font=dict(size=12))
     fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(gridcolor="#ecebe8")
+    fig.update_yaxes(gridcolor="#eceee4")
     return fig
 
 
 # ---------------------------------------------------------------- sidebar: inputs
 sb = st.sidebar
+sb.markdown(assets.veg_strip(), unsafe_allow_html=True)
 sb.title("Inputs")
 
 sb.subheader("Run")
@@ -165,65 +171,79 @@ sb.caption("Input changes take effect after 'Reset / apply'.")
 df = sess.daily_df()
 test = df[df["phase"] == "test"] if len(df) else df
 twin = sess.twin
-st.title("Digital twin: fresh-food pricing and replenishment")
 cur_date = sess.store.date_of(sess.day).isoformat() if not sess.done else df["date"].iloc[-1].date().isoformat()
 phase = "finished" if sess.done else ("test (twin in control)" if sess.in_test else "warm-up (store practice)")
-st.caption(f"Store {sess.store_cfg.store_id} | SKU {sess.store_cfg.sku} | next decision date **{cur_date}** | "
-           f"day {sess.day} of {sess.warmup_days + sess.test_days} | phase: **{phase}** | policy: **{MODES[sess.mode]}**")
+st.markdown(assets.hero(f"Store {sess.store_cfg.store_id} &middot; SKU {sess.store_cfg.sku} (broccoli) &middot; next decision "
+                        f"{cur_date} &middot; day {sess.day} of {sess.warmup_days + sess.test_days} &middot; {phase} "
+                        f"&middot; {MODES[sess.mode]}"), unsafe_allow_html=True)
 st.progress(min(1.0, max(0.0, (sess.day - sess.warmup_days) / sess.test_days)), text="Test period progress")
 
 K_ = kpis(df, twin.n_replans if sess.mode != "practice" else 0) if len(test) else {}
 m = st.columns(7)
-m[0].metric("Profit, test period (CNY)", f"{K_.get('Profit (CNY)', 0):,.0f}")
-m[1].metric("Waste (% purchases)", f"{K_.get('Waste (% of purchases)', float('nan')):.1f}")
-m[2].metric("Stock-out hours (%)", f"{K_.get('Stock-out hours (% of open hours)', float('nan')):.1f}")
+m[0].metric("Profit (CNY)", f"{K_.get('Profit (CNY)', 0):,.0f}")
+m[1].metric("Waste %", f"{K_.get('Waste (% of purchases)', float('nan')):.1f}")
+m[2].metric("Stock-out h %", f"{K_.get('Stock-out hours (% of open hours)', float('nan')):.1f}")
 m[3].metric("Re-plans", f"{K_.get('Re-plans (solver calls)', 0)}")
 m[4].metric("Price changes", f"{K_.get('Price changes', 0)}")
 la = sess.last_action
-m[5].metric("Last price (CNY/kg)", f"{la.price:.2f}" if la else "-")
-m[6].metric("Last order (kg)", f"{la.order_qty:.1f}" if la else "-")
+m[5].metric("Price CNY/kg", f"{la.price:.2f}" if la else "-")
+m[6].metric("Order kg", f"{la.order_qty:.1f}" if la else "-")
 
-tabs = st.tabs(["Overview", "Inputs: data streams", "Outputs: decisions & plan", "Plots", "Optimiser explorer",
-                "Policy comparison", "Agent log", "About the model"])
+tabs = st.tabs(["🥦 Overview", "📥 Inputs: data streams", "📤 Outputs: decisions & plan", "📈 Plots",
+                "🧮 Optimiser explorer", "⚖️ Policy comparison", "📜 Agent log", "ℹ️ About the model"])
 
 # ---------------------------------------------------------------- Overview
 with tabs[0]:
     st.subheader("How the twin works")
     if True:
         st.graphviz_chart("""
-digraph G { rankdir=LR; nodesep=0.3; ranksep=0.35; node [shape=box, style="rounded,filled", fillcolor="#f4f3f0", color="#b8b7b2", fontname=Helvetica, fontsize=16]; edge [fontname=Helvetica, fontsize=13];
- store [label="Physical store\\n(simulated)", fillcolor="#e3eefb"];
+digraph G { rankdir=LR; nodesep=0.3; ranksep=0.35; node [shape=box, style="rounded,filled", fillcolor="#f1f8e9", color="#9ccc65", fontname=Helvetica, fontsize=16]; edge [fontname=Helvetica, fontsize=13];
+ store [label="Physical store\\n(simulated)", fillcolor="#fff3e0", color="#ffb74d"];
  data [label="Data streams\\nPOS, ERP, supplier,\\nstocktake, waste,\\nback-orders, sensors"];
  est [label="State & parameter\\nestimation\\na, c1, lambda(T), censoring"];
  agent [label="Autonomous agent\\nCUSUM demand, cost,\\nhorizon, cold-chain rules"];
  opt [label="Optimisation engine\\nAlgorithm 1 (exact reduction)\\nProp. 1, Lemmas 1-2"];
  chk [label="Checks\\nTheorem 1, Prop. 2,\\nProp. 4, storage cap"];
- dec [label="Decisions\\nprice p*, order Q*/S*,\\ncycle L*", fillcolor="#e2f4ec"];
- store -> data -> est -> agent; agent -> opt [label="re-plan?"]; opt -> chk -> dec -> store [label="ESL / ERP"];
+ dec [label="Decisions\\nprice p*, order Q*/S*,\\ncycle L*", fillcolor="#c8e6c9", color="#43a047"];
+ {rank=same; store; dec} {rank=same; data; chk} {rank=same; est; opt}
+ store -> data -> est -> agent; agent -> opt [label="re-plan?"]; opt -> chk -> dec; dec -> store [label="ESL / ERP"];
 }""", width="stretch")
     l, r = st.columns(2)
     with l:
-        st.subheader("Latest decision")
+        st.subheader("Shelf today")
         if la:
-            st.markdown(f"- **Price:** CNY {la.price:.2f}/kg\n- **Order:** {la.order_qty:.1f} kg\n"
-                        f"- **Next delivery in:** {la.next_delivery_in_days} day(s)\n"
-                        f"- **Phase:** {sess.last_info.get('phase', '-')}\n"
-                        f"- **Re-planned:** {'yes - ' + sess.last_info.get('reasons', '') if sess.last_info.get('replanned') else 'no'}")
+            st_ = pd.DataFrame(sess.ledger.tables["stocktake"])
+            age = st_["oldest_lot_age_days"].iloc[-1] if len(st_) else 0
+            age = 0 if age is None or age != age else age
+            w28 = 100 * df["waste_kg"].tail(28).sum() / max(df["purchased_kg"].tail(28).sum(), 1e-9)
+            st.markdown(assets.shelf_label("Broccoli", la.price, la.order_qty, la.next_delivery_in_days,
+                                           df["on_hand_kg"].iloc[-1], w28, age, sess.store_cfg.shelf_life_days),
+                        unsafe_allow_html=True)
+            st.caption(f"Phase: {sess.last_info.get('phase', '-')} | re-planned: "
+                       f"{'yes - ' + sess.last_info.get('reasons', '') if sess.last_info.get('replanned') else 'no'}")
     with r:
         st.subheader("Status")
+        badges = []
         if twin.plan is not None:
             p = twin.plan
-            st.markdown(("✅ Theorem 1 concavity condition holds" if p["thm1_ok"] else
-                         "⚠️ Theorem 1 condition fails - plan flagged for review") + f"  \n`{p['thm1_case']}`")
-            if p["storage_binding"]:
-                st.markdown("⚠️ Storage capacity binds the plan")
+            badges.append(("ok", "✓ Theorem 1 holds") if p["thm1_ok"] else ("warn", "⚠ Theorem 1 fails: review plan"))
+            badges.append(("warn", "⚠ Storage cap binds") if p["storage_binding"] else ("ok", "✓ Within storage capacity"))
             be = p["break_even"]
             if be:
-                st.markdown(f"{'✅' if be['meet'] else 'ℹ️'} Next break at {be['breakpoint']:.0f} kg: offered discount "
-                            f"{100 * be['d_offered']:.1f}% vs break-even {100 * be['d_dagger']:.1f}% "
-                            f"({'meet it' if be['meet'] else 'not worth meeting with the current cycle'})")
+                badges.append(("ok" if be["meet"] else "info",
+                               f"Break {be['breakpoint']:.0f} kg: offered {100 * be['d_offered']:.1f}% vs "
+                               f"break-even {100 * be['d_dagger']:.1f}%"))
+            badges.append(("info", f"Plan: cycle {p['L']:.0f} d, in-stock {100 * p['nu']:.0f}% of cycle"))
         if len(df) and df["hours_above_alarm"].iloc[-1] >= sess.agent.temp_alarm_hours:
-            st.markdown(f"🌡️ **Cold-chain alert:** {df['hours_above_alarm'].iloc[-1]} h above {sess.agent.temp_alarm_c} C yesterday")
+            badges.append(("warn", f"🌡 Cold-chain alert: {df['hours_above_alarm'].iloc[-1]} h above {sess.agent.temp_alarm_c:.0f} °C"))
+        else:
+            badges.append(("ok", "✓ Cold chain normal"))
+        if twin.n_replans:
+            badges.append(("info", f"{twin.n_replans} re-plans so far"))
+        st.markdown('<div class="card">' + "".join(f'<span class="badge {k}">{t}</span><br>' for k, t in badges)
+                    + "</div>", unsafe_allow_html=True)
+        if twin.plan is not None:
+            st.caption(f"Theorem 1 check: {twin.plan['thm1_case']}")
         if sess.mode == "practice":
             st.info("Policy is the store's practice: no optimisation plan.")
 
@@ -240,7 +260,7 @@ with tabs[1]:
         pos = pd.DataFrame(L_["pos_hourly"])
         pos_d = pos[pos["timestamp"].str.startswith(last_date) & (pos["channel"] == "shelf")]
         fig = fig_base("POS: hourly sales, most recent day", "kg", 280)
-        fig.add_bar(x=pos_d["timestamp"].str[11:16], y=pos_d["qty_kg"], name="Sold", marker_color=C["blue"])
+        fig.add_bar(x=pos_d["timestamp"].str[11:16], y=pos_d["qty_kg"], name="Sold", marker_color=C["s1"])
         so = pos_d[pos_d["stockout"]]
         fig.add_scatter(x=so["timestamp"].str[11:16], y=[0] * len(so), mode="markers", name="Stock-out hour",
                         marker=dict(symbol="x", size=10, color=C["alert"]))
@@ -250,7 +270,7 @@ with tabs[1]:
         sen_d = sen.tail(24)
         fig = fig_base("Chiller temperature, last 24 h", "deg C", 280)
         fig.add_scatter(x=sen_d["timestamp"].str[11:16], y=sen_d["temp_c"], mode="lines+markers", name="Chiller",
-                        line=dict(color=C["blue"], width=2), marker=dict(size=6))
+                        line=dict(color=C["s1"], width=2), marker=dict(size=6))
         fig.add_hline(y=sess.agent.temp_alarm_c, line=dict(color=C["alert"], dash="dash"),
                       annotation_text="alarm", annotation_position="top left")
         b_.plotly_chart(fig, width="stretch")
@@ -320,8 +340,8 @@ with tabs[2]:
         with l:
             t, I = inventory_path(P, p)
             fig = fig_base("Planned inventory over one cycle, Eq. (3)", "kg")
-            fig.add_scatter(x=t, y=I, mode="lines", name="I(t)", line=dict(color=C["blue"], width=2),
-                            fill="tozeroy", fillcolor="rgba(42,120,214,0.12)")
+            fig.add_scatter(x=t, y=I, mode="lines", name="I(t)", line=dict(color=C["s1"], width=2),
+                            fill="tozeroy", fillcolor="rgba(46,139,61,0.15)")
             fig.add_vline(x=p["t1"], line=dict(color=C["grey"], dash="dot"), annotation_text="t1*")
             fig.update_xaxes(title="days since delivery")
             st.plotly_chart(fig, width="stretch")
@@ -331,7 +351,7 @@ with tabs[2]:
                      ("Ordering", -P.K), ("Profit", p["profit_cycle"])]
             fig = fig_base("Expected profit components per cycle", "CNY")
             fig.add_bar(x=[i[0] for i in items], y=[i[1] for i in items],
-                        marker_color=[C["blue"] if v >= 0 else C["orange"] for _, v in items],
+                        marker_color=[C["s1"] if v >= 0 else C["s3"] for _, v in items],
                         text=[f"{v:,.1f}" for _, v in items], textposition="outside")
             fig.update_layout(hovermode="closest", showlegend=False)
             st.plotly_chart(fig, width="stretch")
@@ -373,54 +393,54 @@ with tabs[3]:
         fig.add_scatter(x=x, y=d["a_implied"], mode="markers", name="Implied by daily sales",
                         marker=dict(size=4, color=C["grey"], opacity=0.6))
         fig.add_scatter(x=x, y=d["gt_a_true"], mode="lines", name="True level (hidden)",
-                        line=dict(color=C["aqua"], width=2, dash="dash"))
+                        line=dict(color=C["s3"], width=2, dash="dash"))
         if d["a_plan"].notna().any():
             fig.add_scatter(x=x, y=d["a_plan"], mode="lines", name="Level used by twin plan",
-                            line=dict(color=C["blue"], width=2, shape="hv"))
+                            line=dict(color=C["s1"], width=2, shape="hv"))
         fig.add_scatter(x=alarms["date"], y=alarms["a_plan"], mode="markers", name="Demand alarm",
                         marker=dict(symbol="triangle-up", size=11, color=C["alert"]))
         l.plotly_chart(fig, width="stretch")
 
         fig = fig_base("Prices", "CNY/kg")
-        fig.add_scatter(x=x, y=d["price"], mode="lines", name="Selling price", line=dict(color=C["blue"], width=2, shape="hv"))
-        fig.add_scatter(x=x, y=d["wholesale"], mode="lines", name="Wholesale price", line=dict(color=C["orange"], width=2))
+        fig.add_scatter(x=x, y=d["price"], mode="lines", name="Selling price", line=dict(color=C["s1"], width=2, shape="hv"))
+        fig.add_scatter(x=x, y=d["wholesale"], mode="lines", name="Wholesale price", line=dict(color=C["s2"], width=2))
         if d["c_plan"].notna().any():
             fig.add_scatter(x=x, y=d["c_plan"], mode="lines", name="Cost used by plan",
-                            line=dict(color=C["violet"], width=2, dash="dot", shape="hv"))
+                            line=dict(color=C["s4"], width=2, dash="dot", shape="hv"))
         r.plotly_chart(fig, width="stretch")
 
         fig = fig_base("Stock at 22:00 and open back-orders", "kg")
-        fig.add_scatter(x=x, y=d["on_hand_kg"], mode="lines", name="On hand", line=dict(color=C["blue"], width=2))
-        fig.add_scatter(x=x, y=d["open_backorders_kg"], mode="lines", name="Open back-orders", line=dict(color=C["orange"], width=2))
-        fig.add_scatter(x=x, y=d["received_kg"], mode="markers", name="Delivered", marker=dict(size=4, color=C["aqua"]))
+        fig.add_scatter(x=x, y=d["on_hand_kg"], mode="lines", name="On hand", line=dict(color=C["s1"], width=2))
+        fig.add_scatter(x=x, y=d["open_backorders_kg"], mode="lines", name="Open back-orders", line=dict(color=C["s2"], width=2))
+        fig.add_scatter(x=x, y=d["received_kg"], mode="markers", name="Delivered", marker=dict(size=4, color=C["s3"]))
         l.plotly_chart(fig, width="stretch")
 
         ws_all = 100 * df["waste_kg"].rolling(28, min_periods=7).sum() / df["purchased_kg"].rolling(28, min_periods=7).sum()
         ws = ws_all.loc[d.index]
         fig = fig_base("Waste share, rolling 28 days", "% of purchases")
-        fig.add_scatter(x=x, y=ws, mode="lines", name="Waste share", line=dict(color=C["orange"], width=2))
+        fig.add_scatter(x=x, y=ws, mode="lines", name="Waste share", line=dict(color=C["s3"], width=2))
         r.plotly_chart(fig, width="stretch")
 
         fig = fig_base("Chiller temperature (daily)", "deg C")
-        fig.add_scatter(x=x, y=d["temp_max_c"], mode="lines", name="Daily max", line=dict(color=C["orange"], width=2))
-        fig.add_scatter(x=x, y=d["temp_mean_c"], mode="lines", name="Daily mean", line=dict(color=C["blue"], width=2))
+        fig.add_scatter(x=x, y=d["temp_max_c"], mode="lines", name="Daily max", line=dict(color=C["s2"], width=2))
+        fig.add_scatter(x=x, y=d["temp_mean_c"], mode="lines", name="Daily mean", line=dict(color=C["s1"], width=2))
         fig.add_hline(y=sess.agent.temp_alarm_c, line=dict(color=C["alert"], dash="dash"), annotation_text="alarm")
         l.plotly_chart(fig, width="stretch")
 
         fig = fig_base("Cumulative profit (simulator accounting)", "CNY")
-        fig.add_scatter(x=x, y=d["fin_profit"].cumsum(), mode="lines", name="Cumulative profit", line=dict(color=C["blue"], width=2))
+        fig.add_scatter(x=x, y=d["fin_profit"].cumsum(), mode="lines", name="Cumulative profit", line=dict(color=C["s1"], width=2))
         r.plotly_chart(fig, width="stretch")
 
         if d["cusum_pos"].notna().any():
             fig = fig_base("Agent: CUSUM statistics of log demand", "std. dev.")
-            fig.add_scatter(x=x, y=d["cusum_pos"], mode="lines", name="Upward", line=dict(color=C["blue"], width=2))
-            fig.add_scatter(x=x, y=d["cusum_neg"], mode="lines", name="Downward", line=dict(color=C["orange"], width=2))
+            fig.add_scatter(x=x, y=d["cusum_pos"], mode="lines", name="Upward", line=dict(color=C["s1"], width=2))
+            fig.add_scatter(x=x, y=d["cusum_neg"], mode="lines", name="Downward", line=dict(color=C["s2"], width=2))
             fig.add_hline(y=sess.agent.cusum_h, line=dict(color=C["alert"], dash="dash"), annotation_text="h")
             l.plotly_chart(fig, width="stretch")
 
         fig = fig_base("Daily sales vs true demand", "kg/day")
-        fig.add_scatter(x=x, y=d["gt_true_demand_kg"], mode="lines", name="True demand (hidden)", line=dict(color=C["aqua"], width=2))
-        fig.add_scatter(x=x, y=d["sales_kg"], mode="lines", name="Sales", line=dict(color=C["blue"], width=2))
+        fig.add_scatter(x=x, y=d["gt_true_demand_kg"], mode="lines", name="True demand (hidden)", line=dict(color=C["s3"], width=2))
+        fig.add_scatter(x=x, y=d["sales_kg"], mode="lines", name="Sales", line=dict(color=C["s1"], width=2))
         r.plotly_chart(fig, width="stretch")
 
 # ---------------------------------------------------------------- Optimiser explorer
@@ -483,7 +503,7 @@ with tabs[5]:
         st.dataframe(tab.style.format("{:,.1f}"), width="stretch")
         ref = MODES["static"]
         fig = fig_base("Cumulative profit minus that of the static plan", "CNY", 380)
-        cols = [C["blue"], C["orange"], C["aqua"], C["grey"], C["violet"], C["magenta"]]
+        cols = [C["s1"], C["s2"], C["s3"], C["grey"], C["s4"], C["s6"]]
         for i, col in enumerate(ser.columns):
             if col == ref:
                 continue

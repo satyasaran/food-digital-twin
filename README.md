@@ -18,6 +18,7 @@ python check_model.py         # optional: verifies the engine (about 1.5 min)
 | `simulator.py` | **Physical side.** A simulated store emitting POS, ERP receipts, supplier price list, stocktake, waste, back-orders, chiller sensors and calendar; finance accounting; per-day paired randomness |
 | `twin.py` | **Virtual side.** Estimation (censoring-corrected demand intercept, 7-day median cost, temperature-aware λ), CUSUM agent with demand, cost, horizon and cold-chain rules, benchmark policies, session runner, policy comparison |
 | `app.py` | **GUI** |
+| `assets.py` | Original vegetable illustrations (inline SVG), food-themed styling, shelf-label card |
 | `check_model.py` | Self-checks: closed forms vs ODE/quadrature (max rel. error ~1e-11); Algorithm 1 vs brute force (agreement to 1e-4); Φ vs finite differences |
 
 ## GUI
